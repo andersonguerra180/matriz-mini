@@ -1,0 +1,30 @@
+{
+  "name": "BKR Matriz Mini",
+  "short_name": "Matriz Mini",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EDE8DF",
+  "theme_color": "#EDE8DF",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./receber",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "arquivos",
+          "accept": ["*/*", "application/zip", "application/x-zip-compressed", "text/plain", ".zip", ".txt"]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#EDE8DF">
+<title>BKR Matriz Mini</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --fundo:#EDE8DF; --ponto:#D9D2C6; --cartao:#F8F6F1; --linha:#DDD6CA;
+    --texto:#2B2724; --fraco:#7C766D; --pilula:#DCD5C9; --pilula-forte:#3B3632;
+    --acento:#2A9FD6; --ok:#2E8B4E;
+  }
+  * { box-sizing:border-box; }
+  html { background:var(--fundo); }
+  body {
+    margin:0; min-height:100vh; color:var(--texto);
+    font-family: -apple-system, "SF Pro Text", "Helvetica Neue", Roboto, system-ui, sans-serif;
+    background-color:var(--fundo);
+    background-image: radial-gradient(var(--ponto) 1.2px, transparent 1.3px);
+    background-size: 22px 22px;
+    padding: 20px 16px 40px;
+  }
+  .topo { display:flex; align-items:center; gap:14px; margin:4px 4px 22px; }
+  .logo { width:52px; height:52px; border-radius:12px; flex:none; display:block; }
+  h1 { font-size:26px; font-weight:800; margin:0; letter-spacing:-.01em; }
+  .sub { color:var(--fraco); font-size:13px; margin:2px 0 0; }
+
+  .cartao {
+    background:var(--cartao); border:1px solid var(--linha); border-radius:22px;
+    padding:16px; margin-bottom:14px; box-shadow:0 3px 0 rgba(60,50,40,.06);
+  }
+  .rotulo { font-size:11px; letter-spacing:.16em; color:var(--fraco); font-weight:800; margin:2px 2px 10px; }
+
+  .pilula {
+    display:block; width:100%; border:0; border-radius:999px; padding:15px 18px;
+    background:var(--pilula); color:var(--texto); font: inherit; font-size:15px; font-weight:700;
+    text-align:center; text-decoration:none; margin-top:10px; cursor:pointer;
+  }
+  .pilula.forte { background:var(--pilula-forte); color:#F8F6F1; }
+  .pilula:active { filter:brightness(.95); }
+
+  ol { margin:0; padding-left:20px; line-height:1.75; font-size:15px; }
+  .meta { color:var(--fraco); font-size:13px; line-height:1.5; }
+  .ok { display:flex; align-items:center; gap:8px; color:var(--ok); font-weight:800; font-size:17px; margin:0 0 4px; }
+  .ok::before { content:""; width:10px; height:10px; border-radius:50%; background:var(--ok); }
+  .arq { border-top:1px solid var(--linha); padding-top:12px; margin-top:12px; word-break:break-word; }
+  .nome { font-weight:700; font-size:15px; }
+  .esconde { display:none; }
+</style>
+</head>
+<body>
+  <div class="topo">
+    <img class="logo" src="logo.png" alt="BKR">
+    <div>
+      <h1>Matriz Mini</h1>
+      <p class="sub">Receber conversas do WhatsApp</p>
+    </div>
+  </div>
+
+  <div id="recebido" class="cartao esconde">
+    <div class="rotulo">RECEBIDO</div>
+    <p class="ok">Conversa recebida</p>
+    <div id="quando" class="meta"></div>
+    <div id="lista"></div>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">PASSO 1 — INSTALAR (UMA VEZ SÓ)</div>
+    <div id="status-instalado" class="meta"></div>
+    <button id="btn-instalar" class="pilula forte esconde">Instalar Matriz Mini</button>
+    <p id="manual" class="meta">Se o botão não aparecer: menu <b>⋮</b> do Chrome → <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b> → Instalar).</p>
+  </div>
+
+  <div class="cartao">
+    <div class="rotulo">PASSO 2 — ENVIAR UMA CONVERSA</div>
+    <ol>
+      <li>No WhatsApp, abra uma conversa → <b>⋮</b> → Mais → <b>Exportar conversa</b>.</li>
+      <li>Na lista de compartilhamento, toque em <b>Matriz Mini</b>.</li>
+      <li>O Matriz Mini abre e mostra a conversa recebida.</li>
+    </ol>
+  </div>
+
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+
+  let pedido = null;
+  const btn = document.getElementById('btn-instalar');
+  const st = document.getElementById('status-instalado');
+  const marcarInstalado = () => {
+    st.textContent = '✓ Instalado. Pode enviar conversas pelo WhatsApp.';
+    document.getElementById('manual').classList.add('esconde');
+    btn.classList.add('esconde');
+  };
+  if (window.matchMedia('(display-mode: standalone)').matches) marcarInstalado();
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); pedido = e; btn.classList.remove('esconde'); });
+  btn.addEventListener('click', async () => { if (!pedido) return; pedido.prompt(); await pedido.userChoice; pedido = null; btn.classList.add('esconde'); });
+  window.addEventListener('appinstalled', marcarInstalado);
+
+  function tamanho(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+  }
+  async function mostrarRecebido() {
+    if (!new URLSearchParams(location.search).has('recebido')) return;
+    const cache = await caches.open('bkr-recebidos');
+    const r = await cache.match('./recebido/info');
+    if (!r) return;
+    const info = await r.json();
+    document.getElementById('recebido').classList.remove('esconde');
+    document.getElementById('quando').textContent = 'Recebido às ' + new Date(info.quando).toLocaleTimeString('pt-BR');
+    const lista = document.getElementById('lista');
+    if (!info.arquivos.length) {
+      const d = document.createElement('div'); d.className = 'arq';
+      d.innerHTML = '<div class="nome">Chegou só texto, nenhum arquivo</div><div class="meta"></div>';
+      d.querySelector('.meta').textContent = (info.titulo + ' ' + info.texto).trim() || '(vazio)';
+      lista.appendChild(d);
+    }
+    for (const a of info.arquivos) {
+      const d = document.createElement('div'); d.className = 'arq';
+      d.innerHTML = '<div class="nome"></div><div class="meta"></div>';
+      d.querySelector('.nome').textContent = a.nome;
+      d.querySelector('.meta').textContent = tamanho(a.tamanho) + ' · ' + a.tipo;
+      const resp = await cache.match(a.chave);
+      if (resp) {
+        const link = document.createElement('a');
+        link.className = 'pilula';
+        link.textContent = 'Salvar no celular';
+        link.href = URL.createObjectURL(await resp.blob());
+        link.download = a.nome;
+        d.appendChild(link);
+      }
+      lista.appendChild(d);
+    }
+    history.replaceState(null, '', './');
+  }
+  mostrarRecebido();
+</script>
+</body>
+</html>
