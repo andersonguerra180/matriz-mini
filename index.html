@@ -49,55 +49,107 @@
   .arq { border-top:1px solid var(--linha); padding-top:12px; margin-top:12px; word-break:break-word; }
   .nome { font-weight:700; font-size:15px; }
   .esconde { display:none; }
+  .erro { color:#B3261E; font-weight:700; }
+  .barra { height:8px; border-radius:99px; background:var(--pilula); overflow:hidden; margin-top:10px; }
+  .barra > div { height:100%; width:0; background:var(--pilula-forte); transition:width .2s; }
+  .pc { display:flex; align-items:center; gap:8px; font-weight:700; }
+  .pc::before { content:""; width:9px; height:9px; border-radius:50%; background:var(--fraco); }
+  .pc.on::before { background:var(--ok); }
 </style>
-</head>
+
 <body>
   <div class="topo">
     <img class="logo" src="logo.png" alt="BKR">
     <div>
       <h1>Matriz Mini</h1>
-      <p class="sub">Receber conversas do WhatsApp</p>
+      <p class="sub">Enviar conversas do WhatsApp para o computador</p>
     </div>
   </div>
 
   <div id="recebido" class="cartao esconde">
-    <div class="rotulo">RECEBIDO</div>
-    <p class="ok">Conversa recebida</p>
-    <div id="quando" class="meta"></div>
+    <div class="rotulo">CONVERSA</div>
     <div id="lista"></div>
   </div>
 
   <div class="cartao">
-    <div class="rotulo">PASSO 1 — INSTALAR (UMA VEZ SÓ)</div>
+    <div class="rotulo">COMPUTADOR</div>
+    <div id="pc" class="pc">Nenhum computador pareado</div>
+    <p id="pc-ajuda" class="meta">No computador, abra o Matriz Mini → <b>IMPORTAR WHATSAPP</b> e escaneie o QR code com a câmera do celular.</p>
+    <p id="pc-perm" class="meta esconde">Se o Chrome perguntar sobre <b>dispositivos na rede local</b>, toque em <b>Permitir</b>.</p>
+  </div>
+
+  <div id="cartao-instalar" class="cartao">
+    <div class="rotulo">INSTALAR (UMA VEZ SÓ)</div>
     <div id="status-instalado" class="meta"></div>
     <button id="btn-instalar" class="pilula forte esconde">Instalar Matriz Mini</button>
     <p id="manual" class="meta">Se o botão não aparecer: menu <b>⋮</b> do Chrome → <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b> → Instalar).</p>
   </div>
 
   <div class="cartao">
-    <div class="rotulo">PASSO 2 — ENVIAR UMA CONVERSA</div>
+    <div class="rotulo">ENVIAR UMA CONVERSA</div>
     <ol>
       <li>No WhatsApp, abra uma conversa → <b>⋮</b> → Mais → <b>Exportar conversa</b>.</li>
       <li>Na lista de compartilhamento, toque em <b>Matriz Mini</b>.</li>
-      <li>O Matriz Mini abre e mostra a conversa recebida.</li>
+      <li>A conversa vai direto para o computador pareado.</li>
     </ol>
   </div>
 
 <script>
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
+  const $ = (id) => document.getElementById(id);
+  const ler = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
+  const gravar = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
 
+  // ── Instalação ─────────────────────────────────────────────
   let pedido = null;
-  const btn = document.getElementById('btn-instalar');
-  const st = document.getElementById('status-instalado');
-  const marcarInstalado = () => {
-    st.textContent = '✓ Instalado. Pode enviar conversas pelo WhatsApp.';
-    document.getElementById('manual').classList.add('esconde');
-    btn.classList.add('esconde');
-  };
+  const marcarInstalado = () => { $('cartao-instalar').classList.add('esconde'); };
   if (window.matchMedia('(display-mode: standalone)').matches) marcarInstalado();
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); pedido = e; btn.classList.remove('esconde'); });
-  btn.addEventListener('click', async () => { if (!pedido) return; pedido.prompt(); await pedido.userChoice; pedido = null; btn.classList.add('esconde'); });
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); pedido = e; $('btn-instalar').classList.remove('esconde'); });
+  $('btn-instalar').addEventListener('click', async () => { if (!pedido) return; pedido.prompt(); await pedido.userChoice; pedido = null; $('btn-instalar').classList.add('esconde'); });
   window.addEventListener('appinstalled', marcarInstalado);
+
+  // ── Pareamento: o QR do computador abre ?pc=IP:PORTA&k=CHAVE ─
+  const params = new URLSearchParams(location.search);
+  if (params.get('pc') && params.get('k')) {
+    gravar('bkr.pc', params.get('pc'));
+    gravar('bkr.k', params.get('k'));
+  }
+  const pcEndereco = () => ler('bkr.pc');
+  const pcChave = () => ler('bkr.k');
+  const base = () => 'http://' + pcEndereco() + '/whatsapp';
+
+  async function verificarComputador() {
+    if (!pcEndereco()) return false;
+    $('pc-perm').classList.remove('esconde');
+    $('pc').textContent = 'Procurando o computador…';
+    try {
+      const r = await fetch(base() + '/ping?k=' + encodeURIComponent(pcChave()), { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const info = await r.json().catch(() => ({}));
+      $('pc').textContent = 'Conectado: ' + (info.nome || pcEndereco());
+      $('pc').classList.add('on');
+      $('pc-ajuda').textContent = 'Pronto. As conversas que você compartilhar com o Matriz Mini vão para este computador.';
+      $('pc-perm').classList.add('esconde');
+      return true;
+    } catch (_) {
+      $('pc').textContent = 'Computador não encontrado';
+      $('pc').classList.remove('on');
+      $('pc-ajuda').innerHTML = 'Confira se o celular está no mesmo Wi-Fi e se o Matriz Mini está aberto em <b>IMPORTAR WHATSAPP</b>. Se o computador mudou de rede, escaneie o QR code de novo.';
+      return false;
+    }
+  }
+
+  function enviar(blob, nome, barra, status) {
+    return new Promise((ok) => {
+      const x = new XMLHttpRequest();
+      x.open('POST', base() + '/receber?k=' + encodeURIComponent(pcChave()) + '&nome=' + encodeURIComponent(nome));
+      x.setRequestHeader('Content-Type', 'application/octet-stream');
+      x.upload.onprogress = (e) => { if (e.lengthComputable) barra.style.width = (100 * e.loaded / e.total).toFixed(0) + '%'; };
+      x.onload = () => ok(x.status >= 200 && x.status < 300);
+      x.onerror = () => ok(false);
+      x.send(blob);
+    });
+  }
 
   function tamanho(b) {
     if (b < 1024) return b + ' B';
@@ -105,40 +157,60 @@
     if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
     return (b / 1073741824).toFixed(2) + ' GB';
   }
-  async function mostrarRecebido() {
-    if (!new URLSearchParams(location.search).has('recebido')) return;
+
+  // ── Conversa recebida pelo menu Compartilhar ────────────────
+  async function processarRecebido(conectado) {
+    if (!params.has('recebido')) return;
     const cache = await caches.open('bkr-recebidos');
     const r = await cache.match('./recebido/info');
     if (!r) return;
     const info = await r.json();
-    document.getElementById('recebido').classList.remove('esconde');
-    document.getElementById('quando').textContent = 'Recebido às ' + new Date(info.quando).toLocaleTimeString('pt-BR');
-    const lista = document.getElementById('lista');
+    $('recebido').classList.remove('esconde');
+    const lista = $('lista');
     if (!info.arquivos.length) {
-      const d = document.createElement('div'); d.className = 'arq';
-      d.innerHTML = '<div class="nome">Chegou só texto, nenhum arquivo</div><div class="meta"></div>';
-      d.querySelector('.meta').textContent = (info.titulo + ' ' + info.texto).trim() || '(vazio)';
-      lista.appendChild(d);
+      lista.innerHTML = '<div class="nome">Chegou só texto, nenhum arquivo</div>';
+      return;
     }
     for (const a of info.arquivos) {
       const d = document.createElement('div'); d.className = 'arq';
-      d.innerHTML = '<div class="nome"></div><div class="meta"></div>';
+      d.innerHTML = '<div class="nome"></div><div class="meta"></div><div class="barra"><div></div></div><p class="meta st"></p>';
       d.querySelector('.nome').textContent = a.nome;
-      d.querySelector('.meta').textContent = tamanho(a.tamanho) + ' · ' + a.tipo;
-      const resp = await cache.match(a.chave);
-      if (resp) {
-        const link = document.createElement('a');
-        link.className = 'pilula';
-        link.textContent = 'Salvar no celular';
-        link.href = URL.createObjectURL(await resp.blob());
-        link.download = a.nome;
-        d.appendChild(link);
-      }
+      d.querySelector('.meta').textContent = tamanho(a.tamanho);
       lista.appendChild(d);
+      const resp = await cache.match(a.chave);
+      if (!resp) continue;
+      const blob = await resp.blob();
+      const barra = d.querySelector('.barra > div'), st = d.querySelector('.st');
+
+      const salvar = document.createElement('a');
+      salvar.className = 'pilula'; salvar.textContent = 'Salvar no celular';
+      salvar.href = URL.createObjectURL(blob); salvar.download = a.nome;
+
+      const tentar = async () => {
+        st.className = 'meta st'; st.textContent = 'Enviando para o computador…'; barra.style.width = '0';
+        if (await enviar(blob, a.nome, barra, st)) {
+          barra.style.width = '100%';
+          st.className = 'ok st'; st.textContent = 'Enviada para o computador';
+          await cache.delete(a.chave);
+        } else {
+          st.className = 'erro st'; st.textContent = 'Não foi possível enviar.';
+          if (!d.contains(reenviar)) d.append(reenviar, salvar);
+        }
+      };
+      const reenviar = document.createElement('button');
+      reenviar.className = 'pilula forte'; reenviar.textContent = 'Tentar de novo';
+      reenviar.onclick = async () => { if (await verificarComputador()) tentar(); };
+
+      if (conectado) await tentar();
+      else { st.className = 'erro st'; st.textContent = 'Pareie com o computador para enviar.'; d.append(reenviar, salvar); }
     }
-    history.replaceState(null, '', './');
   }
-  mostrarRecebido();
+
+  history.replaceState(null, '', './');
+  (async () => {
+    const conectado = await verificarComputador();
+    await processarRecebido(conectado);
+  })();
 </script>
 </body>
 </html>
